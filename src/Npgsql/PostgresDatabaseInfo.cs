@@ -369,9 +369,18 @@ COMMIT TRANSACTION;
                         if (reader.HasRows)
                         {
                             reader.Read();
-                            var isInRecovery = reader.GetBoolean(0);
-                            return !isInRecovery;
-                        }
+                            switch (reader[0])
+                            {
+                                case "t":
+                                    return true;
+
+                                case "f":
+                                    return false;
+
+                                default:
+                                    throw new Exception("Recovery Mode Undefined.");
+                            }
+                         }
                     }
                 }
                 catch (Exception e)
@@ -379,10 +388,8 @@ COMMIT TRANSACTION;
                     Console.WriteLine(e);
                     //swallow any exception
                 }
-
-                return false;
+                return false;   
             }
-
         }
 
         /// <summary>
