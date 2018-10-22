@@ -25,6 +25,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
 using System.Linq;
@@ -74,8 +75,12 @@ namespace Npgsql
         /// </summary>
         public bool IsRedshift { get; private set; }
 
-        /// <inheritdoc />
-        public override bool SupportsUnlisten => Version >= new Version(6, 4, 0) && !IsRedshift;
+        ///<summary>
+        /// True if the connection is read only
+        /// </summary>
+        public bool IsReadOnly {get; private set; }
+        
+        public override bool SupportsUnlisten => Version >= new Version(6, 4, 0) && !IsRedshift &&!IsReadOnly;
 
         /// <summary>
         /// True if the 'pg_enum' table includes the 'enumsortorder' column; otherwise, false.
@@ -116,7 +121,17 @@ namespace Npgsql
 
             IsRedshift = csb.ServerCompatibilityMode == ServerCompatibilityMode.Redshift;
             _types = await LoadBackendTypes(conn, timeout, async);
+            IsReadOnly = await LoadIsReadOnly(conn, timeout, async);
         }
+        /// <summary>
+        /// Generates a raw SQL query to deterime is the database in recovery/readonly/replacated
+        /// </summary>
+        /// <returns></returns>
+        static string GenerateIsReadOnlyQuery()
+        {
+            return "select pg_is_in_recovery() ";
+        }
+
 
         /// <summary>
         /// Generates a raw SQL query string to select type information.
@@ -329,6 +344,45 @@ COMMIT TRANSACTION;
                     return byOID.Values.ToList();
                 }
             }
+        }
+
+        internal async Task<bool> LoadIsReadOnly([NotNull] NpgsqlConnection conn, NpgsqlTimeout timeout, bool async)
+        {
+            var commandTimeout = 0;  // Default to infinity
+            if (timeout.IsSet)
+            {
+                commandTimeout = (int)timeout.TimeLeft.TotalSeconds;
+                if (commandTimeout <= 0)
+                    throw new TimeoutException();
+            }
+
+            var isReadOnlyQuery = GenerateIsReadOnlyQuery();
+            using (var command = new NpgsqlCommand(isReadOnlyQuery, conn))
+            {
+                command.CommandTimeout = commandTimeout;
+                command.AllResultTypesAreUnknown = true;
+                try
+                {
+                    using (var reader = async ? await command.ExecuteReaderAsync() : command.ExecuteReader())
+                    {
+                        timeout.Check();
+                        if (reader.HasRows)
+                        {
+                            reader.Read();
+                            var isInRecovery = reader.GetBoolean(0);
+                            return !isInRecovery;
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                    //swallow any exception
+                }
+
+                return false;
+            }
+
         }
 
         /// <summary>
