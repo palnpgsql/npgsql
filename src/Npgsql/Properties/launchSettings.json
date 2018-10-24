@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Npgsql": {
+      "commandName": "Executable",
+      "executablePath": "C:\\Users\\u6035303\\Documents\\Visual Studio\\Projects\\FirstPostgresApp\\PostGreConnectionTest\\bin\\x64\\Debug\\PostGreConnectionTest.exe"
+    }
+  }
+}

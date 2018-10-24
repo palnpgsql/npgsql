@@ -25,7 +25,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
 using System.Linq;
@@ -75,11 +74,8 @@ namespace Npgsql
         /// </summary>
         public bool IsRedshift { get; private set; }
 
-        ///<summary>
-        /// True if the connection is read only
-        /// </summary>
+        /// <inheritdoc />
         public bool IsReadOnly {get; private set; }
-        
         public override bool SupportsUnlisten => Version >= new Version(6, 4, 0) && !IsRedshift &&!IsReadOnly;
 
         /// <summary>
@@ -123,15 +119,10 @@ namespace Npgsql
             _types = await LoadBackendTypes(conn, timeout, async);
             IsReadOnly = await LoadIsReadOnly(conn, timeout, async);
         }
-        /// <summary>
-        /// Generates a raw SQL query to deterime is the database in recovery/readonly/replacated
-        /// </summary>
-        /// <returns></returns>
         static string GenerateIsReadOnlyQuery()
         {
             return "select pg_is_in_recovery() ";
         }
-
 
         /// <summary>
         /// Generates a raw SQL query string to select type information.
@@ -355,43 +346,6 @@ COMMIT TRANSACTION;
                 if (commandTimeout <= 0)
                     throw new TimeoutException();
             }
-
-            var isReadOnlyQuery = GenerateIsReadOnlyQuery();
-            using (var command = new NpgsqlCommand(isReadOnlyQuery, conn))
-            {
-                command.CommandTimeout = commandTimeout;
-                command.AllResultTypesAreUnknown = true;
-                try
-                {
-                    using (var reader = async ? await command.ExecuteReaderAsync() : command.ExecuteReader())
-                    {
-                        timeout.Check();
-                        if (reader.HasRows)
-                        {
-                            reader.Read();
-                            switch (reader[0])
-                            {
-                                case "t":
-                                    return true;
-
-                                case "f":
-                                    return false;
-
-                                default:
-                                    throw new Exception("Recovery Mode Undefined.");
-                            }
-                         }
-                    }
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine(e);
-                    //swallow any exception
-                }
-                return false;   
-            }
-        }
-
         /// <summary>
         /// Loads composite fields for the composite type specified by the OID.
         /// </summary>
